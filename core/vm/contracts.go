@@ -149,6 +149,13 @@ var PrecompiledContractsIstanbul = map[common.Address]PrecompiledContract{
 	hashHeaderAddress:            &hashHeader{},
 	getParentSealBitmapAddress:   &getParentSealBitmap{},
 	getVerifiedSealBitmapAddress: &getVerifiedSealBitmap{},
+	bls12377G1AddAddress:         &bls12377G1Add{},
+	bls12377G1MulAddress:         &bls12377G1Mul{},
+	bls12377G1MultiExpAddress:    &bls12377G1MultiExp{},
+	bls12377G2AddAddress:         &bls12377G2Add{},
+	bls12377G2MulAddress:         &bls12377G2Mul{},
+	bls12377G2MultiExpAddress:    &bls12377G2MultiExp{},
+	bls12377PairingAddress:       &bls12377Pairing{},
 }
 
 // PrecompiledContractsDonut contains the default set of pre-compiled Ethereum
@@ -1253,12 +1260,12 @@ func (c *bls12377G1Add) RequiredGas(input []byte) uint64 {
 	return params.Bls12377G1AddGas
 }
 
-func (c *bls12377G1Add) Run(input []byte) ([]byte, error) {
+func (c *bls12377G1Add) Run(input []byte, caller common.Address, evm *EVM, gas uint64) ([]byte, uint64, error) {
 	// Implements EIP-2537 G1Add precompile.
 	// > G1 addition call expects `256` bytes as an input that is interpreted as byte concatenation of two G1 points (`128` bytes each).
 	// > Output is an encoding of addition operation result - single G1 point (`128` bytes).
 	if len(input) != 256 {
-		return nil, errBLS12377InvalidInputLength
+		return nil, gas, errBLS12377InvalidInputLength
 	}
 	var err error
 	var p0, p1 *bls12377.PointG1
@@ -1268,11 +1275,11 @@ func (c *bls12377G1Add) Run(input []byte) ([]byte, error) {
 
 	// Decode G1 point p_0
 	if p0, err = g.DecodePoint(input[:128]); err != nil {
-		return nil, err
+		return nil, gas, err
 	}
 	// Decode G1 point p_1
 	if p1, err = g.DecodePoint(input[128:]); err != nil {
-		return nil, err
+		return nil, gas, err
 	}
 
 	// Compute r = p_0 + p_1
@@ -1280,7 +1287,7 @@ func (c *bls12377G1Add) Run(input []byte) ([]byte, error) {
 	g.Add(r, p0, p1)
 
 	// Encode the G1 point result into 128 bytes
-	return g.EncodePoint(r), nil
+	return g.EncodePoint(r), gas, nil
 }
 
 // bls12377G1Mul implements EIP-2537 G1Mul precompile.
@@ -1291,12 +1298,12 @@ func (c *bls12377G1Mul) RequiredGas(input []byte) uint64 {
 	return params.Bls12377G1MulGas
 }
 
-func (c *bls12377G1Mul) Run(input []byte) ([]byte, error) {
+func (c *bls12377G1Mul) Run(input []byte, caller common.Address, evm *EVM, gas uint64) ([]byte, uint64, error) {
 	// Implements EIP-2537 G1Mul precompile.
 	// > G1 multiplication call expects `160` bytes as an input that is interpreted as byte concatenation of encoding of G1 point (`128` bytes) and encoding of a scalar value (`32` bytes).
 	// > Output is an encoding of multiplication operation result - single G1 point (`128` bytes).
 	if len(input) != 160 {
-		return nil, errBLS12377InvalidInputLength
+		return nil, gas, errBLS12377InvalidInputLength
 	}
 	var err error
 	var p0 *bls12377.PointG1
@@ -1306,7 +1313,7 @@ func (c *bls12377G1Mul) Run(input []byte) ([]byte, error) {
 
 	// Decode G1 point
 	if p0, err = g.DecodePoint(input[:128]); err != nil {
-		return nil, err
+		return nil, gas, err
 	}
 	// Decode scalar value
 	e := new(big.Int).SetBytes(input[128:])
@@ -1316,7 +1323,7 @@ func (c *bls12377G1Mul) Run(input []byte) ([]byte, error) {
 	g.MulScalar(r, p0, e)
 
 	// Encode the G1 point into 128 bytes
-	return g.EncodePoint(r), nil
+	return g.EncodePoint(r), gas, nil
 }
 
 // bls12377G1MultiExp implements EIP-2537 G1MultiExp precompile.
@@ -1341,13 +1348,13 @@ func (c *bls12377G1MultiExp) RequiredGas(input []byte) uint64 {
 	return (uint64(k) * params.Bls12377G1MulGas * discount) / 1000
 }
 
-func (c *bls12377G1MultiExp) Run(input []byte) ([]byte, error) {
+func (c *bls12377G1MultiExp) Run(input []byte, caller common.Address, evm *EVM, gas uint64) ([]byte, uint64, error) {
 	// Implements EIP-2537 G1MultiExp precompile.
 	// G1 multiplication call expects `160*k` bytes as an input that is interpreted as byte concatenation of `k` slices each of them being a byte concatenation of encoding of G1 point (`128` bytes) and encoding of a scalar value (`32` bytes).
 	// Output is an encoding of multiexponentiation operation result - single G1 point (`128` bytes).
 	k := len(input) / 160
 	if len(input) == 0 || len(input)%160 != 0 {
-		return nil, errBLS12377InvalidInputLength
+		return nil, gas, errBLS12377InvalidInputLength
 	}
 	var err error
 	points := make([]*bls12377.PointG1, k)
@@ -1362,7 +1369,7 @@ func (c *bls12377G1MultiExp) Run(input []byte) ([]byte, error) {
 		t0, t1, t2 := off, off+128, off+160
 		// Decode G1 point
 		if points[i], err = g.DecodePoint(input[t0:t1]); err != nil {
-			return nil, err
+			return nil, gas, err
 		}
 		// Decode scalar value
 		scalars[i] = new(big.Int).SetBytes(input[t1:t2])
@@ -1373,7 +1380,7 @@ func (c *bls12377G1MultiExp) Run(input []byte) ([]byte, error) {
 	g.MultiExp(r, points, scalars)
 
 	// Encode the G1 point to 128 bytes
-	return g.EncodePoint(r), nil
+	return g.EncodePoint(r), gas, nil
 }
 
 // bls12377G2Add implements EIP-2537 G2Add precompile.
@@ -1384,12 +1391,12 @@ func (c *bls12377G2Add) RequiredGas(input []byte) uint64 {
 	return params.Bls12377G2AddGas
 }
 
-func (c *bls12377G2Add) Run(input []byte) ([]byte, error) {
+func (c *bls12377G2Add) Run(input []byte, caller common.Address, evm *EVM, gas uint64) ([]byte, uint64, error) {
 	// Implements EIP-2537 G2Add precompile.
 	// > G2 addition call expects `512` bytes as an input that is interpreted as byte concatenation of two G2 points (`256` bytes each).
 	// > Output is an encoding of addition operation result - single G2 point (`256` bytes).
 	if len(input) != 512 {
-		return nil, errBLS12377InvalidInputLength
+		return nil, gas, errBLS12377InvalidInputLength
 	}
 	var err error
 	var p0, p1 *bls12377.PointG2
@@ -1400,18 +1407,18 @@ func (c *bls12377G2Add) Run(input []byte) ([]byte, error) {
 
 	// Decode G2 point p_0
 	if p0, err = g.DecodePoint(input[:256]); err != nil {
-		return nil, err
+		return nil, gas, err
 	}
 	// Decode G2 point p_1
 	if p1, err = g.DecodePoint(input[256:]); err != nil {
-		return nil, err
+		return nil, gas, err
 	}
 
 	// Compute r = p_0 + p_1
 	g.Add(r, p0, p1)
 
 	// Encode the G2 point into 256 bytes
-	return g.EncodePoint(r), nil
+	return g.EncodePoint(r), gas, nil
 }
 
 // bls12377G2Mul implements EIP-2537 G2Mul precompile.
@@ -1422,12 +1429,12 @@ func (c *bls12377G2Mul) RequiredGas(input []byte) uint64 {
 	return params.Bls12377G2MulGas
 }
 
-func (c *bls12377G2Mul) Run(input []byte) ([]byte, error) {
+func (c *bls12377G2Mul) Run(input []byte, caller common.Address, evm *EVM, gas uint64) ([]byte, uint64, error) {
 	// Implements EIP-2537 G2MUL precompile logic.
 	// > G2 multiplication call expects `288` bytes as an input that is interpreted as byte concatenation of encoding of G2 point (`256` bytes) and encoding of a scalar value (`32` bytes).
 	// > Output is an encoding of multiplication operation result - single G2 point (`256` bytes).
 	if len(input) != 288 {
-		return nil, errBLS12377InvalidInputLength
+		return nil, gas, errBLS12377InvalidInputLength
 	}
 	var err error
 	var p0 *bls12377.PointG2
@@ -1437,7 +1444,7 @@ func (c *bls12377G2Mul) Run(input []byte) ([]byte, error) {
 
 	// Decode G2 point
 	if p0, err = g.DecodePoint(input[:256]); err != nil {
-		return nil, err
+		return nil, gas, err
 	}
 	// Decode scalar value
 	e := new(big.Int).SetBytes(input[256:])
@@ -1447,7 +1454,7 @@ func (c *bls12377G2Mul) Run(input []byte) ([]byte, error) {
 	g.MulScalar(r, p0, e)
 
 	// Encode the G2 point into 256 bytes
-	return g.EncodePoint(r), nil
+	return g.EncodePoint(r), gas, nil
 }
 
 // bls12377G2MultiExp implements EIP-2537 G2MultiExp precompile.
@@ -1472,13 +1479,13 @@ func (c *bls12377G2MultiExp) RequiredGas(input []byte) uint64 {
 	return (uint64(k) * params.Bls12377G2MulGas * discount) / 1000
 }
 
-func (c *bls12377G2MultiExp) Run(input []byte) ([]byte, error) {
+func (c *bls12377G2MultiExp) Run(input []byte, caller common.Address, evm *EVM, gas uint64) ([]byte, uint64, error) {
 	// Implements EIP-2537 G2MultiExp precompile logic
 	// > G2 multiplication call expects `288*k` bytes as an input that is interpreted as byte concatenation of `k` slices each of them being a byte concatenation of encoding of G2 point (`256` bytes) and encoding of a scalar value (`32` bytes).
 	// > Output is an encoding of multiexponentiation operation result - single G2 point (`256` bytes).
 	k := len(input) / 288
 	if len(input) == 0 || len(input)%288 != 0 {
-		return nil, errBLS12377InvalidInputLength
+		return nil, gas, errBLS12377InvalidInputLength
 	}
 	var err error
 	points := make([]*bls12377.PointG2, k)
@@ -1493,7 +1500,7 @@ func (c *bls12377G2MultiExp) Run(input []byte) ([]byte, error) {
 		t0, t1, t2 := off, off+256, off+288
 		// Decode G1 point
 		if points[i], err = g.DecodePoint(input[t0:t1]); err != nil {
-			return nil, err
+			return nil, gas, err
 		}
 		// Decode scalar value
 		scalars[i] = new(big.Int).SetBytes(input[t1:t2])
@@ -1504,7 +1511,7 @@ func (c *bls12377G2MultiExp) Run(input []byte) ([]byte, error) {
 	g.MultiExp(r, points, scalars)
 
 	// Encode the G2 point to 256 bytes.
-	return g.EncodePoint(r), nil
+	return g.EncodePoint(r), gas, nil
 }
 
 // bls12377Pairing implements EIP-2537 Pairing precompile.
@@ -1515,7 +1522,7 @@ func (c *bls12377Pairing) RequiredGas(input []byte) uint64 {
 	return params.Bls12377PairingBaseGas + uint64(len(input)/384)*params.Bls12377PairingPerPairGas
 }
 
-func (c *bls12377Pairing) Run(input []byte) ([]byte, error) {
+func (c *bls12377Pairing) Run(input []byte, caller common.Address, evm *EVM, gas uint64) ([]byte, uint64, error) {
 	// Implements EIP-2537 Pairing precompile logic.
 	// > Pairing call expects `384*k` bytes as an inputs that is interpreted as byte concatenation of `k` slices. Each slice has the following structure:
 	// > - `128` bytes of G1 point encoding
@@ -1524,7 +1531,7 @@ func (c *bls12377Pairing) Run(input []byte) ([]byte, error) {
 	// > (which is equivalent of Big Endian encoding of Solidity values `uint256(1)` and `uin256(0)` respectively).
 	k := len(input) / 384
 	if len(input) == 0 || len(input)%384 != 0 {
-		return nil, errBLS12377InvalidInputLength
+		return nil, gas, errBLS12377InvalidInputLength
 	}
 
 	// Initialize BLS12-377 pairing engine
@@ -1539,21 +1546,21 @@ func (c *bls12377Pairing) Run(input []byte) ([]byte, error) {
 		// Decode G1 point
 		p1, err := g1.DecodePoint(input[t0:t1])
 		if err != nil {
-			return nil, err
+			return nil, gas, err
 		}
 		// Decode G2 point
 		p2, err := g2.DecodePoint(input[t1:t2])
 		if err != nil {
-			return nil, err
+			return nil, gas, err
 		}
 
 		// 'point is on curve' check already done,
 		// Here we need to apply subgroup checks.
 		if !g1.InCorrectSubgroup(p1) {
-			return nil, errBLS12377G1PointSubgroup
+			return nil, gas, errBLS12377G1PointSubgroup
 		}
 		if !g2.InCorrectSubgroup(p2) {
-			return nil, errBLS12377G2PointSubgroup
+			return nil, gas, errBLS12377G2PointSubgroup
 		}
 
 		// Update pairing engine with G1 and G2 ponits
@@ -1566,7 +1573,7 @@ func (c *bls12377Pairing) Run(input []byte) ([]byte, error) {
 	if e.Check() {
 		out[31] = 1
 	}
-	return out, nil
+	return out, gas, nil
 }
 
 // decodeBLS12377FieldElement decodes BLS12-377 elliptic curve field element.
