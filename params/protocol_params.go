@@ -149,12 +149,12 @@ const (
 	Sha2_512BaseGas          uint64 = Sha256BaseGas    // Base price for a Sha2-512 operation
 	Sha2_512PerWordGas       uint64 = Sha256PerWordGas // Per-word price for a Sha2-512 operation
 
-	Bls12377G1AddGas          uint64 = 0 // Price for BLS12-377 elliptic curve G1 point addition
-	Bls12377G1MulGas          uint64 = 0 // Price for BLS12-377 elliptic curve G1 point scalar multiplication
-	Bls12377G2AddGas          uint64 = 0 // Price for BLS12-377 elliptic curve G2 point addition
-	Bls12377G2MulGas          uint64 = 0 // Price for BLS12-377 elliptic curve G2 point scalar multiplication
-	Bls12377PairingBaseGas    uint64 = 0 // Base gas price for BLS12-377 elliptic curve pairing check
-	Bls12377PairingPerPairGas uint64 = 0 // Per-point pair gas price for BLS12-377 elliptic curve pairing check
+	Bls12377G1AddGas          uint64 = 600   // Price for BLS12-377 elliptic curve G1 point addition
+	Bls12377G1MulGas          uint64 = 12000 // Price for BLS12-377 elliptic curve G1 point scalar multiplication
+	Bls12377G2AddGas          uint64 = 4500  // Price for BLS12-377 elliptic curve G2 point addition
+	Bls12377G2MulGas          uint64 = 55000 // Price for BLS12-377 elliptic curve G2 point scalar multiplication
+	Bls12377PairingBaseGas    uint64 = 65000 // Base gas price for BLS12-377 elliptic curve pairing check
+	Bls12377PairingPerPairGas uint64 = 55000 // Per-point pair gas price for BLS12-377 elliptic curve pairing check
 )
 
 // Gas discount table for BLS12-377 G1 and G2 multi exponentiation operations
